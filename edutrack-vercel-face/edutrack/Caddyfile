@@ -1,0 +1,11 @@
+# HTTPS reverse-proxy for the standalone Next.js bundle.
+# Required because browsers only expose Geolocation on HTTPS origins.
+
+attendence-gps.space-z.ai {
+    reverse_proxy 127.0.0.1:3000
+    tls [email protected]
+}
+
+localhost {
+    reverse_proxy 127.0.0.1:3000
+}

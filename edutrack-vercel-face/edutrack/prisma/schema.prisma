@@ -1,0 +1,95 @@
+// EduTrack — Chapter 3 schema, adapted for Vercel.
+// Provider is switched from sqlite to postgresql so the database can be
+// hosted on Vercel Postgres / Neon / Supabase / any standard PG instance.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum AttendanceStatus {
+  PRESENT
+  REJECTED
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  // admin passwords are bcrypt-hashed (see src/lib/sas/auth.ts),
+  // student/teacher passwords are scrypt-hashed for the audit spec.
+  password       String
+  passwordAlgo   String    @default("scrypt") // "scrypt" | "bcrypt"
+  role           Role      @default(STUDENT)
+  studentId      String?   @unique
+  // 128-d face descriptor produced by @vladmandic/face-api.
+  // Prisma 5 / Postgres don't allow optional lists — empty array = "not enrolled".
+  faceDescriptor Float[]  @default([])
+  faceEnrolledAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  attendance    Attendance[]
+  taughtClasses Class[]      @relation("TeacherClasses")
+  enrollments   Enrollment[]
+  sessions      Session[]
+}
+
+model Class {
+  id           String   @id @default(cuid())
+  name         String
+  teacherId    String
+  teacher      User     @relation("TeacherClasses", fields: [teacherId], references: [id])
+  geofenceLat  Float
+  geofenceLng  Float
+  radiusMeters Int      @default(100)
+  createdAt    DateTime @default(now())
+
+  enrollments Enrollment[]
+  attendance  Attendance[]
+}
+
+model Enrollment {
+  id        String @id @default(cuid())
+  studentId String
+  classId   String
+  student   User   @relation(fields: [studentId], references: [id])
+  class     Class  @relation(fields: [classId], references: [id])
+
+  @@unique([studentId, classId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Attendance {
+  id              String           @id @default(cuid())
+  studentId       String
+  classId         String
+  lat             Float
+  lng             Float
+  accuracy        Float?
+  status          AttendanceStatus
+  distanceM       Int
+  faceDistance    Float?           // euclidean distance from stored descriptor (lower = better; <=0.45 = match)
+  faceMatched     Boolean?
+  markedAt        DateTime         @default(now())
+
+  student User  @relation(fields: [studentId], references: [id])
+  class   Class @relation(fields: [classId], references: [id])
+}
